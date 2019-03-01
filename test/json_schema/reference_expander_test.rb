@@ -265,6 +265,54 @@ describe JsonSchema::ReferenceExpander do
     assert schema.expanded?
   end
 
+  it "expands a local reference within the link of a remote schema" do
+    sample1 = {
+      "$schema" => "http://json-schema.org/draft-04/hyper-schema",
+      "type" => "object",
+      "properties" => {
+        "foo" => {
+          "$ref" => "http://json-schema.org/b.json#"
+        }
+      }
+    }
+    schema1 = JsonSchema::Parser.new.parse!(sample1)
+    schema1.uri = "http://json-schema.org/a.json"
+
+    sample2 = {
+      "$schema" => "http://json-schema.org/draft-04/hyper-schema",
+      "type" => "object",
+      "definitions" => {
+        "bar" => {
+          "type" => "string",
+          "maxLength" => 4
+        }
+      },
+      "links" => [
+        {
+          "schema" => {
+            "properties" => {
+              "baz" => {
+                "$ref" => "#/definitions/bar"
+              }
+            }
+          }
+        }
+      ]
+    }
+    schema2 = JsonSchema::Parser.new.parse!(sample2)
+    schema2.uri = "http://json-schema.org/b.json"
+
+    # Initialize a store and add our schema to it.
+    store = JsonSchema::DocumentStore.new
+    store.add_schema(schema1)
+    store.add_schema(schema2)
+
+    expander = JsonSchema::ReferenceExpander.new
+    expander.expand!(schema1, store: store)
+
+    assert_equal 4, schema1.properties["foo"].links[0].schema.properties["baz"].max_length
+  end
+
   it "expands a schema with a reference to an external schema with a nested external property reference" do
     sample1 = {
       "$schema" => "http://json-schema.org/draft-04/hyper-schema",
